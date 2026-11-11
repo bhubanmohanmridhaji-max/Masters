@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dispatch Register</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--ink:#1d2b3a;--bg:#f6f5f1;--card:#fff;--line:#d9d6cc;--acc:#2f6f5e;--crust:#b7791f;--bad:#b3261e;--mut:#6b7280}
+@media(prefers-color-scheme:dark){:root{--ink:#e8ecef;--bg:#151a1f;--card:#1e252c;--line:#34404a;--acc:#5fb59d;--crust:#e0a84a;--bad:#f2867f;--mut:#9aa5af}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 "Trebuchet MS",Verdana,sans-serif}
+header{padding:16px 18px 0;max-width:1000px;margin:auto}
+h1{margin:0;font-size:22px;letter-spacing:.2px}
+header p{margin:2px 0 0;color:var(--mut);font-size:13px}
+nav{display:flex;gap:4px;margin-top:12px;border-bottom:2px solid var(--line)}
+nav button{background:none;border:0;padding:10px 16px;font:inherit;color:var(--mut);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px}
+nav button.on{color:var(--ink);border-color:var(--crust);font-weight:700}
+main{max-width:1000px;margin:auto;padding:16px 18px 60px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:16px}
+.row{display:flex;flex-wrap:wrap;gap:12px}
+label{display:block;font-size:13px;color:var(--mut);margin-bottom:3px}
+input,select{font:inherit;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);min-width:0}
+input:focus,select:focus,button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+.grow{flex:1 1 160px}.grow input,.grow select{width:100%}
+button.b{background:var(--acc);color:#fff;border:0;border-radius:6px;padding:9px 16px;font:inherit;cursor:pointer}
+button.g{background:none;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:8px 14px;font:inherit;cursor:pointer}
+button.x{background:none;border:0;color:var(--bad);cursor:pointer;font-size:18px;padding:2px 8px}
+table{width:100%;border-collapse:collapse}
+th,td{padding:7px 8px;text-align:left;border-bottom:1px solid var(--line)}
+th{font-size:13px;color:var(--mut);font-weight:600}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.wrap{overflow-x:auto}
+.tot td{font-weight:700;background:var(--bg)}
+.grand td{font-weight:700;font-size:16px;border-top:2px solid var(--ink);color:var(--acc)}
+.line input[type=number]{width:90px}.line .it{flex:2 1 180px}
+.big{font-size:20px;font-weight:700;color:var(--acc)}
+h2{font-size:17px;margin:0 0 10px}
+.empty{color:var(--mut);padding:10px 0}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:6px;opacity:0;transition:opacity .2s;pointer-events:none}
+#toast.on{opacity:1}
+@media print{nav,.noprint,header p{display:none}body{background:#fff;color:#000}.card{border:0}
+body.pinv header,body.pinv main>section:not(#invoice){display:none}body.pinv #invoice .card:not(.invc){display:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Dispatch Register</h1>
+  <p>Production to outlets, recorded date-wise on this device</p>
+  <nav>
+    <button data-t="entry" class="on">Dispatch</button>
+    <button data-t="report">Monthly report</button>
+    <button data-t="invoice">Invoices</button>
+    <button data-t="settings">Owner settings</button>
+  </nav>
+</header>
+<main>
+ 
+<section id="entry">
+  <div class="card">
+    <div class="row">
+      <div class="grow"><label>Date</label><input type="date" id="eDate"></div>
+      <div class="grow"><label>Dispatch ID</label><input id="eId" readonly></div>
+      <div class="grow"><label>Indent number</label><input id="eInd" placeholder="e.g. 1042"></div>
+      <div class="grow"><label>Outlet</label><select id="eOut"></select></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Items sent</h2>
+    <div id="lines"></div>
+    <div class="row" style="margin-top:10px;align-items:center">
+      <button class="g" id="addLine">Add item</button>
+      <span style="flex:1"></span>
+      <span>Total <span class="big" id="eTot">0.00</span></span>
+      <button class="b" id="save">Save dispatch</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2 id="dayTitle">Dispatched on this date</h2>
+    <div class="wrap" id="dayList"></div>
+  </div>
+</section>
+ 
+<section id="report" hidden>
+  <div class="card noprint">
+    <div class="row" style="align-items:end">
+      <div class="grow"><label>Month</label><input type="month" id="rMonth"></div>
+      <div class="grow"><label>Outlet</label><select id="rOut"></select></div>
+      <button class="b" id="xl">Download Excel</button>
+      <button class="g" onclick="print()">Print</button>
+    </div>
+  </div>
+  <div id="rBody"></div>
+</section>
+ 
+<section id="invoice" hidden>
+  <div class="card noprint">
+    <h2>New invoice</h2>
+    <div class="row" style="align-items:end">
+      <div class="grow"><label>Outlet</label><select id="iOut"></select></div>
+      <div class="grow"><label>From</label><input type="date" id="iFrom"></div>
+      <div class="grow"><label>To</label><input type="date" id="iTo"></div>
+      <button class="b" id="iPrev">Preview invoice</button>
+    </div>
+    <p class="empty">Only dispatches not yet billed are included, so nothing is invoiced twice.</p>
+  </div>
+  <div id="iPreview"></div>
+  <div class="card noprint"><h2>Saved invoices</h2><div class="wrap" id="iList"></div></div>
+</section>
+ 
+<section id="settings" hidden>
+  <div id="lock" class="card">
+    <h2>Owner access</h2>
+    <div class="row" style="align-items:end">
+      <div class="grow"><label>Owner PIN</label><input type="password" id="pin" inputmode="numeric"></div>
+      <button class="b" id="unlock">Open settings</button>
+    </div>
+    <p class="empty">First-time PIN is 1234. Change it after opening settings.</p>
+  </div>
+  <div id="open" hidden>
+    <div class="card">
+      <h2>Master rates (bakery products)</h2>
+      <div class="wrap"><table><thead><tr><th>SKU</th><th>Item name</th><th class="n">Rate</th><th></th></tr></thead><tbody id="rateRows"></tbody></table></div>
+      <div class="row" style="margin-top:10px;align-items:end">
+        <div><label>SKU (optional)</label><input id="nSku" placeholder="auto" style="width:110px"></div>
+        <div class="grow"><label>New item</label><input id="nItem"></div>
+        <div><label>Rate</label><input id="nRate" type="number" min="0" step="0.01" style="width:100px"></div>
+        <button class="b" id="addItem">Add item</button>
+      </div>
+      <p class="empty">SKU numbers are generated automatically (SKU-001, SKU-002 ...) and can be edited. A rate change applies to new dispatches only. Saved dispatches keep the rate they were sent at.</p>
+    </div>
+    <div class="card">
+      <h2>Outlets</h2>
+      <div id="outRows"></div>
+      <div class="row" style="margin-top:10px;align-items:end">
+        <div class="grow"><label>New outlet</label><input id="nOut"></div>
+        <button class="b" id="addOut">Add outlet</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Business details on invoice</h2>
+      <div class="row">
+        <div class="grow"><label>Business name</label><input id="bName"></div>
+        <div class="grow"><label>Phone</label><input id="bPhone"></div>
+        <div class="grow"><label>GSTIN</label><input id="bGstin"></div>
+        <div style="width:110px"><label>GST % (0 = none)</label><input id="bGst" type="number" min="0" step="0.01" style="width:100%"></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div class="grow"><label>Address</label><input id="bAddr"></div>
+        <div class="grow"><label>Payment terms / bank details</label><input id="bTerms"></div>
+        <button class="b" id="bSave" style="align-self:end">Save details</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>PIN and backup</h2>
+      <div class="row" style="align-items:end">
+        <div class="grow"><label>New PIN</label><input id="newPin" type="password" inputmode="numeric"></div>
+        <button class="g" id="setPin">Change PIN</button>
+        <button class="g" id="bk">Download backup</button>
+        <button class="g" id="rs">Restore backup</button>
+        <input type="file" id="rsf" accept=".json" hidden>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+<div id="toast"></div>
+ 
+<script>
+const KEY='dispatchRegister_v1';
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const money=n=>(+n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+const today=()=>{const d=new Date();return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
+const dmy=d=>d.split('-').reverse().join('/');
+ 
+const DEFAULT={
+  pin:'1234',
+  outlets:['KCC','HIS','HARI','ACADEMY','DEPARTMENTAL STORE','PERL HOTEL','FAUSTOS','EVENT','HORTICULTURE',"FARMER'S Market",'Parivar Cafe','Bakery Counter'],
+  items:[],
+  disp:[]
+};
+let db;
+function load(){try{db=JSON.parse(localStorage.getItem(KEY))}catch(e){db=null}
+  if(!db)db=JSON.parse(JSON.stringify(DEFAULT));
+  db.invoices=db.invoices||[];
+  db.biz=db.biz||{name:'',addr:'',phone:'',gstin:'',gst:0,terms:''};
+  db.items.forEach(i=>{if(!i.sku)i.sku=nextSku()});save()}
+function nextSku(){let m=0;db.items.forEach(i=>{const k=/^SKU-(\d+)$/.exec(i.sku||'');if(k)m=Math.max(m,+k[1])});return 'SKU-'+String(m+1).padStart(3,'0')}
+const itemBy=sku=>db.items.find(x=>x.sku===sku);
+function save(){try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){toast('Could not save. Storage is full or blocked.')}}
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),2200)}
+ 
+/* tabs */
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));
+  ['entry','report','invoice','settings'].forEach(s=>$(s).hidden=s!==b.dataset.t);
+  if(b.dataset.t==='report')renderReport();
+  if(b.dataset.t==='entry')renderDay();
+  if(b.dataset.t==='invoice')renderIList();
+});
+ 
+/* dispatch id: DSP-YYYYMMDD-001, one id per saved dispatch */
+function nextId(date){
+  const ids=new Set(db.disp.filter(r=>r.date===date).map(r=>r.id));
+  return 'DSP-'+date.replace(/-/g,'')+'-'+String(ids.size+1).padStart(3,'0');
+}
+function fillOutlets(sel,all){
+  sel.innerHTML=(all?'<option value="">All outlets</option>':'')+db.outlets.map(o=>`<option>${esc(o)}</option>`).join('');
+}
+function rateOf(sku){const i=itemBy(sku);return i?i.r:0}
+ 
+/* entry */
+function itemOptions(sel){return '<option value="">Select item</option>'+db.items.map(i=>`<option value="${esc(i.sku)}" ${i.sku===sel?'selected':''}>${esc(i.sku)} - ${esc(i.n)}</option>`).join('')}
+function addLine(){
+  const d=document.createElement('div');d.className='row line';d.style.marginBottom='8px';
+  d.innerHTML=`<div class="it grow"><select class="li">${itemOptions()}</select></div>
+  <input type="number" class="lq" min="0" step="any" placeholder="Qty">
+  <input class="lr" readonly placeholder="Rate" style="width:90px">
+  <input class="la" readonly placeholder="Amount" style="width:110px">
+  <button class="x" title="Remove">&times;</button>`;
+  $('lines').appendChild(d);
+  const calc=()=>{const r=rateOf(d.querySelector('.li').value),q=+d.querySelector('.lq').value||0;
+    d.querySelector('.lr').value=r?money(r):'';d.querySelector('.la').value=q&&r?money(q*r):'';tot()};
+  d.querySelector('.li').onchange=calc;d.querySelector('.lq').oninput=calc;
+  d.querySelector('.x').onclick=()=>{d.remove();tot()};
+}
+function tot(){let t=0;document.querySelectorAll('#lines .line').forEach(l=>{t+=(+l.querySelector('.lq').value||0)*rateOf(l.querySelector('.li').value)});$('eTot').textContent=money(t)}
+function resetEntry(){$('lines').innerHTML='';addLine();$('eInd').value='';tot();$('eId').value=nextId($('eDate').value)}
+$('addLine').onclick=addLine;
+$('eDate').onchange=()=>{$('eId').value=nextId($('eDate').value);renderDay()};
+$('save').onclick=()=>{
+  const date=$('eDate').value,outlet=$('eOut').value,indent=$('eInd').value.trim();
+  if(!date||!outlet)return toast('Choose date and outlet');
+  const rows=[];
+  document.querySelectorAll('#lines .line').forEach(l=>{
+    const sku=l.querySelector('.li').value,qty=+l.querySelector('.lq').value;
+    if(sku&&qty>0){const it=itemBy(sku),rate=it.r;rows.push({id:$('eId').value,date,indent,outlet,sku,item:it.n,qty,rate,amt:+(qty*rate).toFixed(2)})}
+  });
+  if(!rows.length)return toast('Add at least one item with quantity');
+  if(rows.some(r=>!r.rate)&&!confirm('Some items have no master rate (0). Save anyway?'))return;
+  db.disp.push(...rows);save();toast('Saved '+rows[0].id);resetEntry();renderDay();
+};
+function renderDay(){
+  const d=$('eDate').value,rows=db.disp.filter(r=>r.date===d);
+  $('dayTitle').textContent='Dispatched on '+dmy(d);
+  if(!rows.length){$('dayList').innerHTML='<div class="empty">Nothing dispatched on this date yet.</div>';return}
+  let t=0;
+  $('dayList').innerHTML='<table><thead><tr><th>ID</th><th>Indent</th><th>Outlet</th><th>SKU</th><th>Item</th><th class="n">Qty</th><th class="n">Rate</th><th class="n">Amount</th><th></th></tr></thead><tbody>'+
+  rows.map(r=>{t+=r.amt;return `<tr><td>${esc(r.id)}</td><td>${esc(r.indent)}</td><td>${esc(r.outlet)}</td><td>${esc(r.sku||'')}</td><td>${esc(r.item)}</td><td class="n">${r.qty}</td><td class="n">${money(r.rate)}</td><td class="n">${money(r.amt)}</td><td><button class="x" data-i="${db.disp.indexOf(r)}" title="Delete">&times;</button></td></tr>`}).join('')+
+  `<tr class="tot"><td colspan="7">Day total</td><td class="n">${money(t)}</td><td></td></tr></tbody></table>`;
+  $('dayList').querySelectorAll('.x').forEach(b=>b.onclick=()=>{if(db.disp[+b.dataset.i].inv)return toast('Already billed on '+db.disp[+b.dataset.i].inv+'. Delete that invoice first.');if(confirm('Delete this line?')){db.disp.splice(+b.dataset.i,1);save();renderDay();$('eId').value=nextId($('eDate').value)}});
+}
+ 
+/* report */
+function build(){
+  const m=$('rMonth').value,o=$('rOut').value;
+  const rows=db.disp.filter(r=>r.date.startsWith(m)&&(!o||r.outlet===o))
+    .sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
+  const outs=db.outlets.filter(x=>rows.some(r=>r.outlet===x));
+  rows.forEach(r=>{if(!outs.includes(r.outlet))outs.push(r.outlet)});
+  return {m,outs,rows};
+}
+function renderReport(){
+  const {m,outs,rows}=build();
+  if(!rows.length){$('rBody').innerHTML='<div class="card empty">No dispatches in this month.</div>';return}
+  let grand=0,gq=0,sum='';
+  let html=outs.map(o=>{
+    const rs=rows.filter(r=>r.outlet===o);let q=0,a=0;
+    const body=rs.map(r=>{q+=r.qty;a+=r.amt;return `<tr><td>${dmy(r.date)}</td><td>${esc(r.id)}</td><td>${esc(r.indent)}</td><td>${esc(r.sku||'')}</td><td>${esc(r.item)}</td><td class="n">${r.qty}</td><td class="n">${money(r.rate)}</td><td class="n">${money(r.amt)}</td></tr>`}).join('');
+    grand+=a;gq+=q;sum+=`<tr><td>${esc(o)}</td><td class="n">${q}</td><td class="n">${money(a)}</td></tr>`;
+    return `<div class="card"><h2>${esc(o)}</h2><div class="wrap"><table><thead><tr><th>Date</th><th>Dispatch ID</th><th>Indent</th><th>SKU</th><th>Item</th><th class="n">Qty</th><th class="n">Rate</th><th class="n">Amount</th></tr></thead><tbody>${body}<tr class="tot"><td colspan="5">${esc(o)} total</td><td class="n">${q}</td><td></td><td class="n">${money(a)}</td></tr></tbody></table></div></div>`;
+  }).join('');
+  html+=`<div class="card"><h2>All outlets, ${m}</h2><div class="wrap"><table><thead><tr><th>Outlet</th><th class="n">Qty</th><th class="n">Amount</th></tr></thead><tbody>${sum}<tr class="grand"><td>Grand total</td><td class="n">${gq}</td><td class="n">${money(grand)}</td></tr></tbody></table></div></div>`;
+  $('rBody').innerHTML=html;
+}
+$('rMonth').onchange=renderReport;$('rOut').onchange=renderReport;
+$('xl').onclick=()=>{
+  const {m,outs,rows}=build();if(!rows.length)return toast('No data to export');
+  const A=[['Dispatch report',m],[],['Date','Dispatch ID','Indent','Outlet','SKU','Item Name','Qty','Rate','Amount']];
+  let gq=0,ga=0;const S=[['Outlet','Qty','Amount']];
+  outs.forEach(o=>{let q=0,a=0;
+    rows.filter(r=>r.outlet===o).forEach(r=>{A.push([dmy(r.date),r.id,r.indent,o,r.sku||'',r.item,r.qty,r.rate,r.amt]);q+=r.qty;a+=r.amt});
+    A.push(['','','',o+' total','','',q,'',+a.toFixed(2)],[]);S.push([o,q,+a.toFixed(2)]);gq+=q;ga+=a});
+  A.push(['','','','GRAND TOTAL (all outlets)','','',gq,'',+ga.toFixed(2)]);S.push(['Grand total',gq,+ga.toFixed(2)]);
+  if(typeof XLSX==='undefined'){
+    const csv=A.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='Dispatch_'+m+'.csv';a.click();return;
+  }
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet(A);ws['!cols']=[{wch:11},{wch:18},{wch:10},{wch:20},{wch:10},{wch:24},{wch:8},{wch:9},{wch:12}];
+  XLSX.utils.book_append_sheet(wb,ws,'Dispatch');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(S),'Outlet Summary');
+  XLSX.writeFile(wb,'Dispatch_'+m+'.xlsx');
+};
+ 
+/* settings */
+$('unlock').onclick=()=>{
+  if($('pin').value===db.pin){$('lock').hidden=true;$('open').hidden=false;$('pin').value='';renderSettings()}
+  else toast('Wrong PIN');
+};
+$('pin').onkeydown=e=>{if(e.key==='Enter')$('unlock').click()};
+function renderSettings(){
+  const b=db.biz;$('bName').value=b.name;$('bPhone').value=b.phone;$('bGstin').value=b.gstin;$('bGst').value=b.gst||0;$('bAddr').value=b.addr;$('bTerms').value=b.terms;
+  $('rateRows').innerHTML=db.items.length?db.items.map((it,i)=>`<tr><td><input value="${esc(it.sku)}" data-k="${i}" style="width:100px"></td><td>${esc(it.n)}</td><td class="n"><input type="number" min="0" step="0.01" value="${it.r}" data-r="${i}" style="width:100px;text-align:right"></td><td><button class="x" data-d="${i}" title="Remove">&times;</button></td></tr>`).join(''):'<tr><td colspan="4" class="empty">No items yet. Add your bakery products below.</td></tr>';
+  document.querySelectorAll('[data-r]').forEach(e=>e.onchange=()=>{db.items[+e.dataset.r].r=+e.value||0;save();toast('Rate updated')});
+  document.querySelectorAll('[data-k]').forEach(e=>e.onchange=()=>{
+    const i=+e.dataset.k,v=e.value.trim().toUpperCase();
+    if(!v||db.items.some((x,j)=>j!==i&&x.sku===v)){e.value=db.items[i].sku;return toast('SKU must be unique and not blank')}
+    db.items[i].sku=v;save();resetEntry();toast('SKU updated')});
+  document.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{if(confirm('Remove this item from the master list? Past dispatches are not affected.')){db.items.splice(+b.dataset.d,1);save();renderSettings();resetEntry()}});
+  $('outRows').innerHTML=db.outlets.map((o,i)=>`<div class="row" style="align-items:center;border-bottom:1px solid var(--line)"><span style="flex:1">${esc(o)}</span><button class="x" data-o="${i}" title="Remove">&times;</button></div>`).join('');
+  document.querySelectorAll('[data-o]').forEach(b=>b.onclick=()=>{if(confirm('Remove this outlet? Past dispatches are not affected.')){db.outlets.splice(+b.dataset.o,1);save();renderSettings();refresh()}});
+}
+$('addItem').onclick=()=>{
+  const n=$('nItem').value.trim(),r=+$('nRate').value;
+  if(!n)return toast('Enter item name');
+  if(db.items.some(i=>i.n.toLowerCase()===n.toLowerCase()))return toast('Item already exists');
+  const sku=$('nSku').value.trim().toUpperCase()||nextSku();
+  if(db.items.some(i=>i.sku===sku))return toast('SKU already used');
+  db.items.push({sku,n,r});db.items.sort((a,b)=>a.sku.localeCompare(b.sku));save();$('nItem').value='';$('nSku').value='';$('nRate').value='';renderSettings();resetEntry();
+};
+$('addOut').onclick=()=>{const n=$('nOut').value.trim();if(!n||db.outlets.includes(n))return toast('Enter a new outlet name');db.outlets.push(n);save();$('nOut').value='';renderSettings();refresh()};
+$('setPin').onclick=()=>{const p=$('newPin').value.trim();if(p.length<4)return toast('PIN needs 4 or more digits');db.pin=p;save();$('newPin').value='';toast('PIN changed')};
+$('bk').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(db)],{type:'application/json'}));a.download='dispatch_backup_'+today()+'.json';a.click()};
+$('rs').onclick=()=>$('rsf').click();
+$('rsf').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();
+  rd.onload=()=>{try{const d=JSON.parse(rd.result);if(!Array.isArray(d.disp)||!Array.isArray(d.items))throw 0;
+    if(confirm('Replace all data on this device with the backup?')){db=d;db.invoices=db.invoices||[];db.biz=db.biz||{name:'',addr:'',phone:'',gstin:'',gst:0,terms:''};save();refresh();renderSettings();toast('Backup restored')}}catch(x){toast('Not a valid backup file')}};
+  rd.readAsText(f);e.target.value=''};
+ 
+/* invoices */
+function invNo(date){const p='INV-'+date.slice(0,7).replace('-','')+'-';let m=0;
+  db.invoices.forEach(i=>{if(i.no.startsWith(p))m=Math.max(m,+i.no.slice(p.length)||0)});
+  return p+String(m+1).padStart(3,'0')}
+let draft=null;
+function invHTML(v){
+  const b=db.biz;
+  const body=v.rows.map(r=>`<tr><td>${dmy(r.date)}</td><td>${esc(r.id)}</td><td>${esc(r.indent)}</td><td>${esc(r.sku||'')}</td><td>${esc(r.item)}</td><td class="n">${r.qty}</td><td class="n">${money(r.rate)}</td><td class="n">${money(r.amt)}</td></tr>`).join('');
+  return `<div class="card invc">
+  <div class="row" style="justify-content:space-between">
+    <div><h2 style="font-size:20px;margin:0">${esc(b.name||'Your business name')}</h2>
+    <div>${esc(b.addr)}</div><div>${esc(b.phone)}${b.gstin?' &nbsp; GSTIN: '+esc(b.gstin):''}</div>
+    ${b.name?'':'<div class="noprint" style="color:var(--bad)">Add your business details in Owner settings.</div>'}</div>
+    <div style="text-align:right"><div class="big">INVOICE</div><div>No: <b>${esc(v.no||'assigned on save')}</b></div><div>Date: ${dmy(v.date)}</div></div>
+  </div>
+  <p><b>Bill to:</b> ${esc(v.outlet)}<br>Period: ${dmy(v.from)} to ${dmy(v.to)}</p>
+  <div class="wrap"><table><thead><tr><th>Date</th><th>Dispatch ID</th><th>Indent</th><th>SKU</th><th>Item</th><th class="n">Qty</th><th class="n">Rate</th><th class="n">Amount</th></tr></thead><tbody>${body}
+  <tr class="tot"><td colspan="7">Subtotal</td><td class="n">${money(v.sub)}</td></tr>
+  ${v.g?`<tr><td colspan="7">GST ${v.g}%</td><td class="n">${money(v.gst)}</td></tr>`:''}
+  <tr class="grand"><td colspan="7">Amount due</td><td class="n">${money(v.total)}</td></tr></tbody></table></div>
+  ${b.terms?`<p>${esc(b.terms)}</p>`:''}</div>`;
+}
+function invText(v){
+  const agg={};v.rows.forEach(r=>{const k=(r.sku?r.sku+' ':'')+r.item;agg[k]=agg[k]||{q:0,a:0};agg[k].q+=r.qty;agg[k].a+=r.amt});
+  return [(db.biz.name||'Invoice'),'Invoice '+v.no+' dated '+dmy(v.date),'To: '+v.outlet,'Period: '+dmy(v.from)+' to '+dmy(v.to),'',
+    ...Object.keys(agg).map(k=>k+': '+agg[k].q+' = '+money(agg[k].a)),'',
+    v.g?'GST '+v.g+'%: '+money(v.gst):'','Amount due: '+money(v.total),db.biz.terms||''].filter((x,i,a)=>x!==''||a[i-1]!=='').join('\n');
+}
+function showInv(v,saved){
+  $('iPreview').innerHTML=invHTML(v)+'<div class="row noprint" style="margin-bottom:16px">'+(saved?
+    '<button class="b" id="aPrint">Print / Save as PDF</button><button class="g" id="aWa">Send on WhatsApp</button><button class="g" id="aMail">Send by email</button>':
+    '<button class="b" id="aSave">Save invoice and generate number</button>')+'</div>';
+  if(saved){
+    $('aPrint').onclick=()=>{document.body.classList.add('pinv');print()};
+    $('aWa').onclick=()=>window.open('https://wa.me/?text='+encodeURIComponent(invText(v)));
+    $('aMail').onclick=()=>{location.href='mailto:?subject='+encodeURIComponent('Invoice '+v.no+' - '+v.outlet)+'&body='+encodeURIComponent(invText(v))};
+  }else $('aSave').onclick=saveInv;
+  $('iPreview').scrollIntoView({behavior:'smooth',block:'start'});
+}
+window.onafterprint=()=>document.body.classList.remove('pinv');
+$('iPrev').onclick=()=>{
+  const o=$('iOut').value,f=$('iFrom').value,t=$('iTo').value;
+  if(!o||!f||!t)return toast('Choose outlet and dates');
+  const refs=db.disp.filter(r=>r.outlet===o&&r.date>=f&&r.date<=t&&!r.inv).sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
+  if(!refs.length){draft=null;$('iPreview').innerHTML='<div class="card empty">No unbilled dispatches for this outlet and period.</div>';return}
+  const sub=+refs.reduce((a,r)=>a+r.amt,0).toFixed(2),g=+db.biz.gst||0,gst=+(sub*g/100).toFixed(2);
+  draft={no:'',date:today(),outlet:o,from:f,to:t,refs,rows:refs.map(r=>({date:r.date,id:r.id,indent:r.indent,sku:r.sku||'',item:r.item,qty:r.qty,rate:r.rate,amt:r.amt})),sub,g,gst,total:+(sub+gst).toFixed(2),paid:false};
+  showInv(draft,false);
+};
+function saveInv(){
+  if(!draft)return;
+  draft.no=invNo(draft.date);draft.refs.forEach(r=>r.inv=draft.no);
+  const {refs,...inv}=draft;db.invoices.push(inv);save();draft=null;
+  toast('Invoice '+inv.no+' saved');showInv(inv,true);renderIList();
+}
+function renderIList(){
+  if(!db.invoices.length){$('iList').innerHTML='<div class="empty">No invoices yet.</div>';return}
+  const due=db.invoices.filter(i=>!i.paid).reduce((a,i)=>a+i.total,0);
+  $('iList').innerHTML=`<p>Outstanding to collect: <span class="big">${money(due)}</span></p><table><thead><tr><th>Invoice</th><th>Date</th><th>Outlet</th><th>Period</th><th class="n">Amount</th><th>Status</th><th></th></tr></thead><tbody>`+
+  db.invoices.slice().reverse().map(i=>`<tr><td>${esc(i.no)}</td><td>${dmy(i.date)}</td><td>${esc(i.outlet)}</td><td>${dmy(i.from)} - ${dmy(i.to)}</td><td class="n">${money(i.total)}</td>
+  <td><button class="g" data-p="${esc(i.no)}" style="padding:3px 10px;${i.paid?'color:var(--acc)':'color:var(--bad)'}">${i.paid?'Paid':'Unpaid'}</button></td>
+  <td style="white-space:nowrap"><button class="g" data-v="${esc(i.no)}" style="padding:3px 10px">Open</button><button class="x" data-x="${esc(i.no)}" title="Delete invoice">&times;</button></td></tr>`).join('')+'</tbody></table>';
+  const f=n=>db.invoices.find(i=>i.no===n);
+  $('iList').querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>showInv(f(b.dataset.v),true));
+  $('iList').querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{const i=f(b.dataset.p);i.paid=!i.paid;save();renderIList()});
+  $('iList').querySelectorAll('[data-x]').forEach(b=>b.onclick=()=>{
+    if(!confirm('Delete invoice '+b.dataset.x+'? Its dispatches become unbilled again.'))return;
+    db.disp.forEach(r=>{if(r.inv===b.dataset.x)delete r.inv});
+    db.invoices=db.invoices.filter(i=>i.no!==b.dataset.x);save();$('iPreview').innerHTML='';renderIList()});
+}
+$('bSave').onclick=()=>{db.biz={name:$('bName').value.trim(),phone:$('bPhone').value.trim(),gstin:$('bGstin').value.trim(),gst:+$('bGst').value||0,addr:$('bAddr').value.trim(),terms:$('bTerms').value.trim()};save();toast('Business details saved')};
+ 
+function refresh(){fillOutlets($('eOut'));fillOutlets($('iOut'));fillOutlets($('rOut'),true);resetEntry();renderDay()}
+load();
+$('eDate').value=today();$('iFrom').value=today().slice(0,8)+'01';$('iTo').value=today();$('rMonth').value=today().slice(0,7);
+refresh();
+</script>
+</body>
+</html>
